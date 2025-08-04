@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Mental Health Companion</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7fafc;
+        }
+        .container {
+            max-width: 960px;
+        }
+        .chart-container {
+            position: relative;
+            height: 300px;
+            max-height: 350px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center my-8 md:my-12">
+            <h1 class="text-4xl md:text-5xl font-bold text-gray-900">Daily Mental Health Companion</h1>
+            <p class="text-lg text-gray-600 mt-2">Your subtle support system for a healthier routine.</p>
+        </header>
+
+        <main class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Mood Logging Section -->
+            <section class="bg-white rounded-xl shadow-lg p-6 flex flex-col items-center">
+                <h2 class="text-2xl font-semibold text-gray-900 mb-4">How are you feeling today?</h2>
+                
+                <div class="flex space-x-2 text-4xl mb-4">
+                    <span class="cursor-pointer hover:scale-125 transition-transform" data-mood="Happy">😊</span>
+                    <span class="cursor-pointer hover:scale-125 transition-transform" data-mood="Calm">😌</span>
+                    <span class="cursor-pointer hover:scale-125 transition-transform" data-mood="Stressed">😫</span>
+                    <span class="cursor-pointer hover:scale-125 transition-transform" data-mood="Tired">😴</span>
+                    <span class="cursor-pointer hover:scale-125 transition-transform" data-mood="Sad">😔</span>
+                </div>
+
+                <textarea id="moodInput" class="w-full h-32 p-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors" placeholder="Write a few words about your day..."></textarea>
+                
+                <button id="getNudgeBtn" class="mt-4 px-6 py-3 bg-blue-600 text-white font-bold rounded-full shadow-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed">
+                    Get a ✨Mindful Nudge✨
+                </button>
+
+                <div id="loadingIndicator" class="hidden mt-4 text-gray-500">
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Generating your nudge...
+                </div>
+                
+                <div id="nudgeContainer" class="mt-6 w-full p-4 bg-blue-50 border border-blue-200 rounded-xl hidden">
+                    <h3 class="text-xl font-bold text-blue-800 mb-2">Your Mindful Nudge:</h3>
+                    <p id="nudgeText" class="text-blue-700 text-lg"></p>
+                </div>
+            </section>
+
+            <!-- Data & Trends Section -->
+            <section class="bg-white rounded-xl shadow-lg p-6">
+                <h2 class="text-2xl font-semibold text-gray-900 mb-4">Your Weekly Mood Trend</h2>
+                <p class="text-sm text-gray-500 mb-4">A visualization of your self-reported emotional well-being over time.</p>
+                <div class="chart-container">
+                    <canvas id="moodChart"></canvas>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const moodInput = document.getElementById('moodInput');
+            const getNudgeBtn = document.getElementById('getNudgeBtn');
+            const nudgeContainer = document.getElementById('nudgeContainer');
+            const nudgeText = document.getElementById('nudgeText');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+
+            let retryCount = 0;
+            const maxRetries = 3;
+            const initialDelay = 1000;
+
+            const makeApiCall = async (prompt) => {
+                const delay = initialDelay * Math.pow(2, retryCount);
+                if (retryCount > 0) {
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+
+                try {
+                    const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                    const payload = { contents: chatHistory };
+                    const apiKey = "";
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        if (response.status === 429 && retryCount < maxRetries) {
+                            retryCount++;
+                            return makeApiCall(prompt);
+                        } else {
+                            throw new Error(`API error: ${response.statusText}`);
+                        }
+                    }
+
+                    const result = await response.json();
+                    retryCount = 0; 
+                    
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        const text = result.candidates[0].content.parts[0].text;
+                        return text;
+                    } else {
+                        throw new Error("Unexpected API response structure or no content.");
+                    }
+                } catch (error) {
+                    console.error("Fetch failed:", error);
+                    return "Sorry, I couldn't generate a nudge right now. Please try again later.";
+                }
+            };
+            
+            getNudgeBtn.addEventListener('click', async () => {
+                const userMood = moodInput.value.trim();
+                if (userMood === "") {
+                    nudgeText.textContent = "Please write a few words about your day first.";
+                    nudgeContainer.classList.remove('hidden');
+                    return;
+                }
+
+                getNudgeBtn.disabled = true;
+                loadingIndicator.classList.remove('hidden');
+                nudgeContainer.classList.add('hidden');
+
+                const prompt = `The user's current mood is: "${userMood}". Act as a supportive, non-clinical wellness companion. Provide a gentle, encouraging micro-nudge or a thoughtful reflection based on their input. The goal is to provide a brief moment of support. Keep the response short and simple.`;
+                
+                const nudge = await makeApiCall(prompt);
+                
+                nudgeText.textContent = nudge;
+                nudgeContainer.classList.remove('hidden');
+                loadingIndicator.classList.add('hidden');
+                getNudgeBtn.disabled = false;
+            });
+
+            // Placeholder Chart.js for the Weekly Mood Trend
+            const moodChartCtx = document.getElementById('moodChart').getContext('2d');
+            const moodData = {
+                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                datasets: [{
+                    label: 'Mood Score (1-10)',
+                    data: [7, 6, 4, 5, 7, 8, 9],
+                    borderColor: '#118AB2',
+                    backgroundColor: 'rgba(17, 138, 178, 0.2)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            };
+            
+            new Chart(moodChartCtx, {
+                type: 'line',
+                data: moodData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 10,
+                            grid: {
+                                display: false
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
